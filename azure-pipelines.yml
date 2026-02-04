@@ -19,15 +19,11 @@ trigger:
 pr: none
 
 variables:
-  # Service connection name (create this in Azure DevOps)
   kubernetesServiceConnection: 'aks-dev'
   namespace: 'pets'
   manifestFile: 'aks-store-quickstart.yaml'
 
 stages:
-  # ============================================
-  # DEPLOY STAGE
-  # ============================================
   - stage: Deploy
     displayName: 'Deploy to AKS'
     jobs:
@@ -43,28 +39,47 @@ stages:
                 # Checkout code
                 - checkout: self
 
-                # Create namespace if it doesn't exist
+                # Create namespace if it doesn't exist (idempotent)
                 - task: Kubernetes@1
-                  displayName: 'Create Namespace'
+                  displayName: 'Create Namespace (if not exists)'
                   inputs:
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     command: 'apply'
-                    useConfigurationFile: false
-                    arguments: 'create namespace $(namespace) --dry-run=client -o yaml | kubectl apply -f -'
+                    useConfigurationFile: true
+                    configurationType: 'inline'
+                    inline: |
+                      apiVersion: v1
+                      kind: Namespace
+                      metadata:
+                        name: $(namespace)
+                        labels:
+                          app: aks-store-demo
+                          managed-by: azure-devops
+
+                # Deploy the application manifests
+                - task: Kubernetes@1
+                  displayName: 'Deploy Application'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+                    namespace: $(namespace)
+                    command: 'apply'
+                    useConfigurationFile: true
+                    configuration: $(manifestFile)
+
+                # Wait for deployments to be ready
+                - task: Kubernetes@1
+                  displayName: 'Wait for Deployments'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+                    namespace: $(namespace)
+                    command: 'rollout'
+                    arguments: 'status deployment/store-front --timeout=120s'
                   continueOnError: true
 
-                # Deploy the application
-                - task: KubernetesManifest@0
-                  displayName: 'Deploy Manifests'
-                  inputs:
-                    action: 'deploy'
-                    kubernetesServiceConnection: $(kubernetesServiceConnection)
-                    namespace: $(namespace)
-                    manifests: |
-                      $(manifestFile)
-
-                # Verify deployment
+                # Verify pods are running
                 - task: Kubernetes@1
                   displayName: 'Verify Pods Running'
                   inputs:
@@ -74,7 +89,7 @@ stages:
                     command: 'get'
                     arguments: 'pods -o wide'
 
-                # Get LoadBalancer IP
+                # Get the LoadBalancer IP
                 - task: Kubernetes@1
                   displayName: 'Get Store Front URL'
                   inputs:
@@ -82,4 +97,4 @@ stages:
                     kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     namespace: $(namespace)
                     command: 'get'
-                    arguments: 'svc store-front -o jsonpath="{.status.loadBalancer.ingress[0].ip}"'
+                    arguments: 'svc store-front -o wide'
