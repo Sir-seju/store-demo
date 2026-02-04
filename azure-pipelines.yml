@@ -34,7 +34,7 @@ stages:
       - deployment: DeployToAKS
         displayName: 'Deploy AKS Store Demo'
         pool:
-          vmImage: 'ubuntu-latest'
+          name: 'Default'  # Self-hosted agent
         environment: 'dev'
         strategy:
           runOnce:
