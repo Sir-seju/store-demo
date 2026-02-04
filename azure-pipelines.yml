@@ -1,0 +1,85 @@
+# Azure DevOps Pipeline: AKS Store Demo
+# Phase 1: Simple Deploy using Raw Manifest
+# 
+# Prerequisites:
+# 1. Create Azure DevOps project
+# 2. Create Kubernetes service connection named 'aks-dev'
+# 3. Import this repo or connect via GitHub
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - 'aks-store-quickstart.yaml'
+      - 'azure-pipelines.yml'
+
+# Manual trigger also available
+pr: none
+
+variables:
+  # Service connection name (create this in Azure DevOps)
+  kubernetesServiceConnection: 'aks-dev'
+  namespace: 'pets'
+  manifestFile: 'aks-store-quickstart.yaml'
+
+stages:
+  # ============================================
+  # DEPLOY STAGE
+  # ============================================
+  - stage: Deploy
+    displayName: 'Deploy to AKS'
+    jobs:
+      - deployment: DeployToAKS
+        displayName: 'Deploy AKS Store Demo'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Checkout code
+                - checkout: self
+
+                # Create namespace if it doesn't exist
+                - task: Kubernetes@1
+                  displayName: 'Create Namespace'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+                    command: 'apply'
+                    useConfigurationFile: false
+                    arguments: 'create namespace $(namespace) --dry-run=client -o yaml | kubectl apply -f -'
+                  continueOnError: true
+
+                # Deploy the application
+                - task: KubernetesManifest@0
+                  displayName: 'Deploy Manifests'
+                  inputs:
+                    action: 'deploy'
+                    kubernetesServiceConnection: $(kubernetesServiceConnection)
+                    namespace: $(namespace)
+                    manifests: |
+                      $(manifestFile)
+
+                # Verify deployment
+                - task: Kubernetes@1
+                  displayName: 'Verify Pods Running'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+                    namespace: $(namespace)
+                    command: 'get'
+                    arguments: 'pods -o wide'
+
+                # Get LoadBalancer IP
+                - task: Kubernetes@1
+                  displayName: 'Get Store Front URL'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+                    namespace: $(namespace)
+                    command: 'get'
+                    arguments: 'svc store-front -o jsonpath="{.status.loadBalancer.ingress[0].ip}"'
