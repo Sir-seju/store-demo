@@ -1,0 +1,33 @@
+# Dev environment values
+# Minimal resources, local datastores, no AI
+
+namespace: "dev"
+
+replicaCount: 1
+
+# Use in-cluster RabbitMQ and MongoDB
+useRabbitMQ: true
+useMongoDB: true
+
+# Disable Azure AD (using local auth)
+useAzureAd: false
+
+# Disable AI service (no OpenAI in dev)
+aiService:
+  create: false
+
+# Virtual services for testing
+virtualCustomer:
+  create: true
+  ordersPerHour: 10  # Lower for dev
+
+virtualWorker:
+  create: true
+  ordersPerHour: 5   # Lower for dev
+
+# Service types - LoadBalancer for easy access
+storeFront:
+  serviceType: LoadBalancer
+
+storeAdmin:
+  serviceType: LoadBalancer
