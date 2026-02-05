@@ -36,14 +36,14 @@ storeAdmin:
 ingress:
   enabled: true
   className: nginx
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+  annotations: {}
   rules:
     - paths:
         - path: /
           pathType: Prefix
           serviceName: store-front
           servicePort: 80
+    - paths:
         - path: /admin
           pathType: Prefix
           serviceName: store-admin
