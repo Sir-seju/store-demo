@@ -3,7 +3,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: store-front-ingress
+  name: aks-store-ingress
   labels:
     app.kubernetes.io/name: store-front
     app.kubernetes.io/managed-by: {{ .Release.Service }}
@@ -17,30 +17,6 @@ spec:
         backend:
           service:
             name: store-front
-            port:
-              number: 80
----
-# Store-Admin Ingress (serves from /admin, rewritten to /)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: store-admin-ingress
-  labels:
-    app.kubernetes.io/name: store-admin
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-    nginx.ingress.kubernetes.io/use-regex: "true"
-spec:
-  ingressClassName: {{ .Values.ingress.className }}
-  rules:
-  - http:
-      paths:
-      - path: /admin(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: store-admin
             port:
               number: 80
 {{- end }}

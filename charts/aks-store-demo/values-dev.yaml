@@ -30,7 +30,7 @@ storeFront:
   serviceType: ClusterIP
 
 storeAdmin:
-  serviceType: ClusterIP
+  serviceType: LoadBalancer
 
 # Ingress configuration
 ingress:
