@@ -16,12 +16,17 @@ trigger:
 
 pr: none
 
+# Parameters show as UI elements when you click "Run pipeline"
+parameters:
+  - name: deployInfra
+    displayName: 'Deploy Infrastructure (NGINX Ingress)?'
+    type: boolean
+    default: false
+
 variables:
   kubernetesServiceConnection: 'aks-dev'
   chartPath: 'charts/aks-store-demo'
   releaseName: 'aks-store'
-  # Set to 'true' in pipeline UI to install/update infrastructure
-  DEPLOY_INFRA: 'false'
 
 stages:
   # ============================================
@@ -29,7 +34,7 @@ stages:
   # ============================================
   - stage: Infrastructure
     displayName: 'Setup Infrastructure'
-    condition: eq(variables['DEPLOY_INFRA'], 'true')
+    condition: eq('${{ parameters.deployInfra }}', 'True')
     jobs:
       - job: InstallIngress
         displayName: 'Install NGINX Ingress Controller'
