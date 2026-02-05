@@ -19,15 +19,32 @@ aiService:
 # Virtual services for testing
 virtualCustomer:
   create: true
-  ordersPerHour: 10  # Lower for dev
+  ordersPerHour: 10
 
 virtualWorker:
   create: true
-  ordersPerHour: 5   # Lower for dev
+  ordersPerHour: 5
 
-# Service types - LoadBalancer for easy access
+# Service types - ClusterIP (accessed via Ingress)
 storeFront:
-  serviceType: LoadBalancer
+  serviceType: ClusterIP
 
 storeAdmin:
-  serviceType: LoadBalancer
+  serviceType: ClusterIP
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  rules:
+    - paths:
+        - path: /
+          pathType: Prefix
+          serviceName: store-front
+          servicePort: 80
+        - path: /admin
+          pathType: Prefix
+          serviceName: store-admin
+          servicePort: 80

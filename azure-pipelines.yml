@@ -20,13 +20,67 @@ variables:
   kubernetesServiceConnection: 'aks-dev'
   chartPath: 'charts/aks-store-demo'
   releaseName: 'aks-store'
+  # Set to 'true' in pipeline UI to install/update infrastructure
+  DEPLOY_INFRA: 'false'
 
 stages:
+  # ============================================
+  # INFRASTRUCTURE STAGE - Install Dependencies
+  # ============================================
+  - stage: Infrastructure
+    displayName: 'Setup Infrastructure'
+    condition: eq(variables['DEPLOY_INFRA'], 'true')
+    jobs:
+      - job: InstallIngress
+        displayName: 'Install NGINX Ingress Controller'
+        pool:
+          name: 'Default'
+        steps:
+          - task: HelmInstaller@0
+            displayName: 'Install Helm'
+            inputs:
+              helmVersion: '3.14.0'
+
+          # Add NGINX Ingress Helm repo
+          - task: HelmDeploy@0
+            displayName: 'Add Ingress Repo'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+              command: 'repo'
+              arguments: 'add ingress-nginx https://kubernetes.github.io/ingress-nginx'
+            continueOnError: true  # Repo might already exist
+
+          - task: HelmDeploy@0
+            displayName: 'Update Helm Repos'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+              command: 'repo'
+              arguments: 'update'
+
+          # Install NGINX Ingress Controller
+          - task: HelmDeploy@0
+            displayName: 'Install NGINX Ingress'
+            inputs:
+              connectionType: 'Kubernetes Service Connection'
+              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+              namespace: 'ingress-nginx'
+              command: 'upgrade'
+              chartType: 'Name'
+              chartName: 'ingress-nginx/ingress-nginx'
+              releaseName: 'ingress-nginx'
+              install: true
+              waitForExecution: true
+              arguments: '--create-namespace --timeout 5m'
+
   # ============================================
   # DEV STAGE
   # ============================================
   - stage: DeployDev
     displayName: 'Deploy to Dev'
+    dependsOn: Infrastructure
+    condition: not(failed('Infrastructure'))  # Run if succeeded OR skipped
     variables:
       namespace: 'dev'
       valuesFile: 'values-dev.yaml'
