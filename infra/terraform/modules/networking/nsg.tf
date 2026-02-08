@@ -66,6 +66,37 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "*"
   }
 
+  # -----------------------------------------------------------------------------
+  # PUBLIC ACCESS RULES
+  # Allow Internet traffic to reach LoadBalancer services (Ingress, store-admin)
+  # -----------------------------------------------------------------------------
+
+  # Allow HTTP from Internet (for store-front via Ingress)
+  security_rule {
+    name                       = "AllowInternetHTTP"
+    priority                   = 400
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = "*"
+  }
+
+  # Allow HTTPS from Internet
+  security_rule {
+    name                       = "AllowInternetHTTPS"
+    priority                   = 410
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = "*"
+  }
+
   tags = var.tags
 }
 
