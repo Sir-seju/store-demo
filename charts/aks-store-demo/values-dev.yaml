@@ -25,14 +25,13 @@ virtualWorker:
   create: true
   ordersPerHour: 5
 
-# Service types - ClusterIP (accessed via Ingress)
-storeFront:
-  serviceType: ClusterIP
+# =============================================================================
+# Service Access Strategy
+# =============================================================================
+# store-front: Accessed via NGINX Ingress on root path (/)
+# store-admin: Direct LoadBalancer (can't use sub-path due to BASE_URL hardcoding)
 
-storeAdmin:
-  serviceType: LoadBalancer
-
-# Ingress configuration
+# Ingress configuration - ONLY for store-front
 ingress:
   enabled: true
   className: nginx
@@ -43,18 +42,10 @@ ingress:
           pathType: Prefix
           serviceName: store-front
           servicePort: 80
-    - paths:
-        - path: /admin
-          pathType: Prefix
-          serviceName: store-admin
-          servicePort: 80
 
 # =============================================================================
 # Workload Identity Configuration
 # =============================================================================
-# This links K8s ServiceAccounts to Azure Managed Identity, enabling pods to
-# authenticate to Azure services (Key Vault) without any secrets.
-# AWS Equivalent: IRSA (IAM Roles for Service Accounts)
 workloadIdentity:
   enabled: true
   clientId: "282d9fcd-89be-482a-b9e4-ddb04205b018"
@@ -64,13 +55,8 @@ keyVault:
   uri: "https://kv-devcattle65.vault.azure.net/"
 
 # =============================================================================
-# Image Registry Configuration
+# Image Overrides - Using our ACR
 # =============================================================================
-# Using our own ACR instead of ghcr.io/azure-samples
-imageRegistry: "acrdevcattle65.azurecr.io"
-imageTag: "latest"
-
-# Override image repositories to use our ACR
 orderService:
   image:
     repository: "acrdevcattle65.azurecr.io/order-service"
@@ -82,12 +68,13 @@ productService:
     tag: "latest"
 
 storeFront:
+  serviceType: ClusterIP  # Accessed via Ingress
   image:
     repository: "acrdevcattle65.azurecr.io/store-front"
     tag: "latest"
 
 storeAdmin:
+  serviceType: LoadBalancer  # Direct access (can't use ingress sub-path)
   image:
     repository: "acrdevcattle65.azurecr.io/store-admin"
     tag: "latest"
-
