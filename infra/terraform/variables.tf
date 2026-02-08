@@ -156,3 +156,21 @@ variable "deploy_networking" {
   type        = string
   default     = "false"
 }
+
+# -----------------------------------------------------------------------------
+# Key Vault Secrets (will be stored securely)
+# -----------------------------------------------------------------------------
+variable "mongodb_connection_string" {
+  description = "MongoDB connection string to store in Key Vault"
+  type        = string
+  sensitive   = true
+  default     = "mongodb://mongodb:27017" # Default uses in-cluster MongoDB
+}
+
+variable "rabbitmq_uri" {
+  description = "RabbitMQ URI to store in Key Vault"
+  type        = string
+  sensitive   = true
+  default     = "amqp://rabbitmq:5672" # Default uses in-cluster RabbitMQ
+}
+

@@ -127,3 +127,22 @@ output "DEPLOY_NETWORKING" {
 output "DEPLOY_POSTGRESQL" {
   value = local.deploy_postgresql
 }
+
+# -----------------------------------------------------------------------------
+# Key Vault Outputs
+# -----------------------------------------------------------------------------
+output "AZURE_KEY_VAULT_URI" {
+  value       = module.keyvault.key_vault_uri
+  description = "Key Vault URI for applications to fetch secrets"
+}
+
+output "AZURE_KEY_VAULT_NAME" {
+  value       = module.keyvault.key_vault_name
+  description = "Key Vault name"
+}
+
+output "AZURE_WORKLOAD_IDENTITY_CLIENT_ID" {
+  value       = module.keyvault.workload_identity_client_id
+  description = "Client ID for Workload Identity (use in K8s ServiceAccount)"
+}
+

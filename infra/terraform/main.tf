@@ -79,3 +79,48 @@ module "networking" {
     ManagedBy   = "terraform"
   }
 }
+
+# -----------------------------------------------------------------------------
+# Key Vault Module (Secrets Management + Workload Identity)
+# -----------------------------------------------------------------------------
+# 
+# ARCHITECTURE NOTES:
+# - Key Vault stores secrets (DB connections, API keys)
+# - Workload Identity allows pods to auth as Azure identity (no secrets in pods!)
+# - Federated credentials link K8s ServiceAccounts to the Azure identity
+# - This is the Azure equivalent of AWS IRSA
+#
+module "keyvault" {
+  source = "./modules/keyvault"
+
+  name_prefix            = local.name
+  location               = azurerm_resource_group.example.location
+  resource_group_name    = azurerm_resource_group.example.name
+  tenant_id              = data.azurerm_client_config.current.tenant_id
+  current_user_object_id = data.azurerm_client_config.current.object_id
+  oidc_issuer_url        = module.aks.oidc_issuer_url
+
+  # Federated credentials: which K8s ServiceAccounts can assume this identity
+  federated_credentials = {
+    "order-service" = {
+      namespace            = "dev"
+      service_account_name = "order-service"
+    }
+    "product-service" = {
+      namespace            = "dev"
+      service_account_name = "product-service"
+    }
+  }
+
+  # Secrets to store in Key Vault
+  mongodb_connection = var.mongodb_connection_string
+  rabbitmq_uri       = var.rabbitmq_uri
+
+  tags = {
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+
+  depends_on = [module.aks]
+}
+

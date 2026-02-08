@@ -48,3 +48,46 @@ ingress:
           pathType: Prefix
           serviceName: store-admin
           servicePort: 80
+
+# =============================================================================
+# Workload Identity Configuration
+# =============================================================================
+# This links K8s ServiceAccounts to Azure Managed Identity, enabling pods to
+# authenticate to Azure services (Key Vault) without any secrets.
+# AWS Equivalent: IRSA (IAM Roles for Service Accounts)
+workloadIdentity:
+  enabled: true
+  clientId: "282d9fcd-89be-482a-b9e4-ddb04205b018"
+
+# Key Vault for secrets
+keyVault:
+  uri: "https://kv-devcattle65.vault.azure.net/"
+
+# =============================================================================
+# Image Registry Configuration
+# =============================================================================
+# Using our own ACR instead of ghcr.io/azure-samples
+imageRegistry: "acrdevcattle65.azurecr.io"
+imageTag: "latest"
+
+# Override image repositories to use our ACR
+orderService:
+  image:
+    repository: "acrdevcattle65.azurecr.io/order-service"
+    tag: "latest"
+
+productService:
+  image:
+    repository: "acrdevcattle65.azurecr.io/product-service"
+    tag: "latest"
+
+storeFront:
+  image:
+    repository: "acrdevcattle65.azurecr.io/store-front"
+    tag: "latest"
+
+storeAdmin:
+  image:
+    repository: "acrdevcattle65.azurecr.io/store-admin"
+    tag: "latest"
+

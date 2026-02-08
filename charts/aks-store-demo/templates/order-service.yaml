@@ -38,12 +38,12 @@ spec:
     metadata:
       labels:
         app: order-service
-        {{- if eq .Values.useAzureAd true }}
+        {{- if or (eq .Values.useAzureAd true) .Values.workloadIdentity.enabled }}
         azure.workload.identity/use: "true"
         {{- end }}
     spec:
-      {{- if eq .Values.useAzureAd true }}
-      serviceAccount: {{ .Values.managedIdentityName }}
+      {{- if or (eq .Values.useAzureAd true) .Values.workloadIdentity.enabled }}
+      serviceAccountName: order-service
       {{- end }}
       nodeSelector:
         "kubernetes.io/os": linux
@@ -58,6 +58,11 @@ spec:
         {{- if eq .Values.useAzureAd false }}
         - secretRef:
             name: order-service-secrets
+        {{- end }}
+        {{- if .Values.workloadIdentity.enabled }}
+        env:
+        - name: KEY_VAULT_URI
+          value: {{ .Values.keyVault.uri | quote }}
         {{- end }}
         resources:
           requests:
