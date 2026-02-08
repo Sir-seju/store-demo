@@ -1,9 +1,15 @@
 # Azure DevOps Pipeline: AKS Store Demo
-# Phase 2: Helm-based Deployment with Multi-Environment Support
+# Multi-Stage Pipeline for Infrastructure, Build, and Deploy
+#
+# STAGES:
+# 1. Terraform - Plan/Apply infrastructure changes
+# 2. Build - Build and push Docker images to ACR
+# 3. Deploy - Helm upgrade to AKS
 #
 # Prerequisites:
-# 1. Kubernetes service connection named 'aks-dev'
-# 2. Self-hosted agent pool 'Default' (or request free parallelism)
+# 1. Kubernetes service connection 'aks-dev'
+# 2. Azure service connection 'azure-sub' (for Terraform + ACR)
+# 3. Self-hosted agent pool 'Default'
 
 trigger:
   branches:
@@ -12,80 +18,157 @@ trigger:
   paths:
     include:
       - 'charts/**'
+      - 'src/**'
+      - 'infra/terraform/**'
       - 'azure-pipelines.yml'
 
 pr: none
 
-# Parameters show as UI elements when you click "Run pipeline"
 parameters:
-  - name: deployInfra
-    displayName: 'Deploy Infrastructure (NGINX Ingress)?'
+  - name: runTerraform
+    displayName: 'Run Terraform (infrastructure changes)?'
     type: boolean
     default: false
+  - name: buildImages
+    displayName: 'Build and push Docker images?'
+    type: boolean
+    default: true
+  - name: deployHelm
+    displayName: 'Deploy with Helm?'
+    type: boolean
+    default: true
 
 variables:
   kubernetesServiceConnection: 'aks-dev'
+  azureServiceConnection: 'azure-sub'
+  acrName: 'acrdevcattle65'
+  resourceGroup: 'rg-devcattle65'
   chartPath: 'charts/aks-store-demo'
   releaseName: 'aks-store'
+  terraformWorkingDir: 'infra/terraform'
 
 stages:
   # ============================================
-  # INFRASTRUCTURE STAGE - Install Dependencies
+  # STAGE 1: TERRAFORM
   # ============================================
-  - stage: Infrastructure
-    displayName: 'Setup Infrastructure'
-    condition: eq('${{ parameters.deployInfra }}', 'True')
+  - stage: Terraform
+    displayName: 'Infrastructure (Terraform)'
+    condition: eq('${{ parameters.runTerraform }}', 'True')
     jobs:
-      - job: InstallIngress
-        displayName: 'Install NGINX Ingress Controller'
+      - job: TerraformPlanApply
+        displayName: 'Terraform Plan & Apply'
         pool:
           name: 'Default'
         steps:
-          - task: HelmInstaller@0
-            displayName: 'Install Helm'
-            inputs:
-              helmVersion: '3.14.0'
+          - checkout: self
 
-          # Add NGINX Ingress Helm repo
-          - task: HelmDeploy@0
-            displayName: 'Add Ingress Repo'
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
             inputs:
-              connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
-              command: 'repo'
-              arguments: 'add ingress-nginx https://kubernetes.github.io/ingress-nginx'
-            continueOnError: true  # Repo might already exist
+              terraformVersion: '1.11.0'
 
-          - task: HelmDeploy@0
-            displayName: 'Update Helm Repos'
+          - task: TerraformCLI@2
+            displayName: 'Terraform Init'
             inputs:
-              connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
-              command: 'repo'
-              arguments: 'update'
+              command: 'init'
+              workingDirectory: '$(terraformWorkingDir)'
+              backendType: 'azurerm'
+              backendServiceArm: '$(azureServiceConnection)'
+              backendAzureRmResourceGroupName: 'rg-terraform-state'
+              backendAzureRmStorageAccountName: 'stterrafstate28f196d4'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'rosetta.tfstate'
 
-          # Install NGINX Ingress Controller
-          - task: HelmDeploy@0
-            displayName: 'Install NGINX Ingress'
+          - task: TerraformCLI@2
+            displayName: 'Terraform Plan'
             inputs:
-              connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
-              namespace: 'ingress-nginx'
-              command: 'upgrade'
-              chartType: 'Name'
-              chartName: 'ingress-nginx/ingress-nginx'
-              releaseName: 'ingress-nginx'
-              install: true
-              waitForExecution: true
-              arguments: '--create-namespace --timeout 5m'
+              command: 'plan'
+              workingDirectory: '$(terraformWorkingDir)'
+              environmentServiceName: '$(azureServiceConnection)'
+              commandOptions: '-var-file=dev.tfvars.json -out=tfplan'
+
+          - task: TerraformCLI@2
+            displayName: 'Terraform Apply'
+            inputs:
+              command: 'apply'
+              workingDirectory: '$(terraformWorkingDir)'
+              environmentServiceName: '$(azureServiceConnection)'
+              commandOptions: 'tfplan'
 
   # ============================================
-  # DEV STAGE
+  # STAGE 2: BUILD IMAGES
+  # ============================================
+  - stage: Build
+    displayName: 'Build Docker Images'
+    dependsOn: Terraform
+    condition: and(not(failed('Terraform')), eq('${{ parameters.buildImages }}', 'True'))
+    jobs:
+      - job: BuildImages
+        displayName: 'Build and Push to ACR'
+        pool:
+          name: 'Default'
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: 'Build order-service'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr build --registry $(acrName) \
+                  --image order-service:$(Build.BuildId) \
+                  --image order-service:latest \
+                  --file src/order-service/Dockerfile \
+                  src/order-service/
+
+          - task: AzureCLI@2
+            displayName: 'Build product-service'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr build --registry $(acrName) \
+                  --image product-service:$(Build.BuildId) \
+                  --image product-service:latest \
+                  --file src/product-service/Dockerfile \
+                  src/product-service/
+
+          - task: AzureCLI@2
+            displayName: 'Build store-front'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr build --registry $(acrName) \
+                  --image store-front:$(Build.BuildId) \
+                  --image store-front:latest \
+                  --file src/store-front/Dockerfile \
+                  src/store-front/
+
+          - task: AzureCLI@2
+            displayName: 'Build store-admin'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az acr build --registry $(acrName) \
+                  --image store-admin:$(Build.BuildId) \
+                  --image store-admin:latest \
+                  --file src/store-admin/Dockerfile \
+                  src/store-admin/
+
+  # ============================================
+  # STAGE 3: DEPLOY TO DEV
   # ============================================
   - stage: DeployDev
     displayName: 'Deploy to Dev'
-    dependsOn: Infrastructure
-    condition: not(failed('Infrastructure'))  # Run if succeeded OR skipped
+    dependsOn: Build
+    condition: and(not(failed('Build')), eq('${{ parameters.deployHelm }}', 'True'))
     variables:
       namespace: 'dev'
       valuesFile: 'values-dev.yaml'
@@ -101,13 +184,11 @@ stages:
               steps:
                 - checkout: self
 
-                # Install Helm (if not available)
                 - task: HelmInstaller@0
                   displayName: 'Install Helm'
                   inputs:
                     helmVersion: '3.14.0'
 
-                # Create namespace if not exists
                 - task: Kubernetes@1
                   displayName: 'Create Namespace'
                   inputs:
@@ -124,7 +205,6 @@ stages:
                         labels:
                           environment: dev
 
-                # Deploy with Helm
                 - task: HelmDeploy@0
                   displayName: 'Helm Upgrade/Install'
                   inputs:
@@ -139,7 +219,6 @@ stages:
                     waitForExecution: true
                     arguments: '-f $(chartPath)/$(valuesFile) --timeout 5m'
 
-                # Verify deployment
                 - task: Kubernetes@1
                   displayName: 'Verify Pods'
                   inputs:
@@ -149,7 +228,6 @@ stages:
                     command: 'get'
                     arguments: 'pods -o wide'
 
-                # Get service endpoints
                 - task: Kubernetes@1
                   displayName: 'Get Services'
                   inputs:
@@ -160,8 +238,9 @@ stages:
                     arguments: 'svc'
 
   # ============================================
-  # PROD STAGE (Future - with approval gate)
+  # STAGE 4: DEPLOY TO PROD (with approval)
   # ============================================
+  # Uncomment when ready for production
   # - stage: DeployProd
   #   displayName: 'Deploy to Prod'
   #   dependsOn: DeployDev
@@ -174,7 +253,7 @@ stages:
   #       displayName: 'Deploy via Helm (Prod)'
   #       pool:
   #         name: 'Default'
-  #       environment: 'prod'  # Add approval gate in Azure DevOps
+  #       environment: 'prod'  # Add approval gate in Azure DevOps UI
   #       strategy:
   #         runOnce:
   #           deploy:
