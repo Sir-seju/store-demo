@@ -19,11 +19,11 @@ aiService:
 # Virtual services for testing
 virtualCustomer:
   create: true
-  ordersPerHour: 10
+  ordersPerHour: 50
 
 virtualWorker:
   create: true
-  ordersPerHour: 5
+  ordersPerHour: 1500
 
 # =============================================================================
 # Service Access Strategy
